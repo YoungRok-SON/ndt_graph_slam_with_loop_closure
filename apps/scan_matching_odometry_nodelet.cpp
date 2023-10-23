@@ -54,11 +54,11 @@ namespace hdl_graph_slam
         msf_pose_after_update_sub = nh.subscribe<geometry_msgs::PoseWithCovarianceStamped>("/msf_core/pose_after_update", 1, boost::bind(&ScanMatchingOdometryNodelet::msf_pose_callback, this, _1, true));
       }
 
-      points_sub = nh.subscribe("/filtered_points", 256, &ScanMatchingOdometryNodelet::cloud_callback, this);
-      read_until_pub = nh.advertise<std_msgs::Header>("/scan_matching_odometry/read_until", 32);
-      odom_pub = nh.advertise<nav_msgs::Odometry>(published_odom_topic, 32);
-      trans_pub = nh.advertise<geometry_msgs::TransformStamped>("/scan_matching_odometry/transform", 32);
-      status_pub = private_nh.advertise<ScanMatchingStatus>("/scan_matching_odometry/status", 8);
+      points_sub         = nh.subscribe("/filtered_points", 256, &ScanMatchingOdometryNodelet::cloud_callback, this);
+      read_until_pub     = nh.advertise<std_msgs::Header>("/scan_matching_odometry/read_until", 32);
+      odom_pub           = nh.advertise<nav_msgs::Odometry>(published_odom_topic, 32);
+      trans_pub          = nh.advertise<geometry_msgs::TransformStamped>("/scan_matching_odometry/transform", 32);
+      status_pub         = private_nh.advertise<ScanMatchingStatus>("/scan_matching_odometry/status", 8);
       aligned_points_pub = nh.advertise<sensor_msgs::PointCloud2>("/aligned_points", 32);
     }
 
@@ -114,6 +114,9 @@ namespace hdl_graph_slam
         downsample_filter = passthrough;
       }
 
+      // Registration cpp에서 GICP나 ICP, NGD_OMP와 같은 방법의
+      // 클래스를 가져와 객체로 반환해줌
+      // NDT_OMP에 대해 알고 싶으면 NDT_OMP 패키지 코드를 더 까봐야함.
       registration = select_registration_method(pnh);
     }
 
@@ -121,27 +124,30 @@ namespace hdl_graph_slam
      * @brief callback for point clouds
      * @param cloud_msg  point cloud msg
      */
-    void cloud_callback(const sensor_msgs::PointCloud2ConstPtr &cloud_msg)
+    void cloud_callback(const sensor_msgs::PointCloud2ConstPtr &cloud_msg)  // 이 노들렛은 왜 또 ROS형식으로 받는건지.. PCL로 바로 받으면 안되나?
     {
-      if (!ros::ok())
+      if (!ros::ok()) // 아 Ctrl+C 잘먹게 하려고..
       {
         return;
       }
 
       pcl::PointCloud<PointT>::Ptr cloud(new pcl::PointCloud<PointT>());
-      pcl::fromROSMsg(*cloud_msg, *cloud);
+      pcl::fromROSMsg(*cloud_msg, *cloud); // 어차피 여기서 변환할 꺼 그냥 prefiltering처럼 받으면 안되나?
 
-      Eigen::Matrix4f pose = matching(cloud_msg->header.stamp, cloud);
+      Eigen::Matrix4f pose = matching(cloud_msg->header.stamp, cloud);  // 얘가 제일 중요한..
       publish_odometry(cloud_msg->header.stamp, cloud_msg->header.frame_id, pose);
 
-      // In offline estimation, point clouds until the published time will be supplied
+      // In offline estimation, point clouds until the published time will be supplied -> ??
       std_msgs::HeaderPtr read_until(new std_msgs::Header());
       read_until->frame_id = points_topic;
       read_until->stamp = cloud_msg->header.stamp + ros::Duration(1, 0);
       read_until_pub.publish(read_until);
 
-      read_until->frame_id = "/filtered_points";
+      read_until->frame_id = "/filtered_points";  // 이거 두 개가 붙어 있으면 무슨 의미지?
       read_until_pub.publish(read_until);
+      /* 이 코드의 의도는 특정한 주제에 대한 포인트 클라우드 데이터를 읽어오는 동안,
+         다음 1초 동안의 데이터도 함께 읽어오라는 지시를 주는 것으로 보입니다.
+         또한, 원본 포인트 클라우드 데이터와 필터링된 포인트 클라우드 데이터에 대한 정보를 각각 발행하는 것으로 보입니다. */
     }
 
     void msf_pose_callback(const geometry_msgs::PoseWithCovarianceStampedConstPtr &pose_msg, bool after_update)
