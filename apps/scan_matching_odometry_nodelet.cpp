@@ -135,7 +135,7 @@ namespace hdl_graph_slam
       pcl::fromROSMsg(*cloud_msg, *cloud); // 어차피 여기서 변환할 꺼 그냥 prefiltering처럼 받으면 안되나?
 
       Eigen::Matrix4f pose = matching(cloud_msg->header.stamp, cloud);  // 얘가 제일 중요한..
-      publish_odometry(cloud_msg->header.stamp, cloud_msg->header.frame_id, pose);
+      publish_odometry(cloud_msg->header.stamp, cloud_msg->header.frame_id, pose); // Odometry 데이터 출력
 
       // In offline estimation, point clouds until the published time will be supplied -> ??
       std_msgs::HeaderPtr read_until(new std_msgs::Header());
@@ -189,23 +189,26 @@ namespace hdl_graph_slam
      */
     Eigen::Matrix4f matching(const ros::Time &stamp, const pcl::PointCloud<PointT>::ConstPtr &cloud)
     {
+      // Keyframe이 없을 때
       if (!keyframe)
       {
         prev_time = ros::Time();
-        prev_trans.setIdentity();
-        keyframe_pose.setIdentity();
-        keyframe_stamp = stamp;
-        keyframe = downsample(cloud);
-        registration->setInputTarget(keyframe);
+        prev_trans.setIdentity(); // prev_trans는 previous estimated transform from keyframe이라는데 keyframe으로부터 이전 프레임까지의 변환행렬을 저장하는 거겠지?
+        keyframe_pose.setIdentity(); 
+        keyframe_stamp = stamp; // 현시점 stamp를 카프레임 시간으로 지정
+        keyframe = downsample(cloud); // downsampling을 하는데 .. 이미 prefiltering에서 필터링 진행하고 온 거 아닌가? 왜 또 하지? -> 필요한 경우 진행하고 roslaunch에 안하도록 지정되어 있음
+        registration->setInputTarget(keyframe); // 지금 들어온 프레임을 키프레임으로 지정
         return Eigen::Matrix4f::Identity();
       }
 
+      // Keyframe이 지정된 경우
       auto filtered = downsample(cloud);
-      registration->setInputSource(filtered);
+      registration->setInputSource(filtered); // 정합에 들어온 포인트 클라우드 전달
 
       std::string msf_source;
       Eigen::Isometry3f msf_delta = Eigen::Isometry3f::Identity();
 
+      // msf가 뭔지 모르겠음. IMU Preintegration해서 init pose로 사용하려는건가..?
       if (private_nh.param<bool>("enable_imu_frontend", false))
       {
         if (msf_pose && msf_pose->header.stamp > keyframe_stamp && msf_pose_after_update && msf_pose_after_update->header.stamp > keyframe_stamp)
@@ -222,7 +225,7 @@ namespace hdl_graph_slam
           std::cerr << "msf data is too old" << std::endl;
         }
       }
-      else if (private_nh.param<bool>("enable_robot_odometry_init_guess", false) && !prev_time.isZero())
+      else if (private_nh.param<bool>("enable_robot_odometry_init_guess", false) && !prev_time.isZero()) // 이것도 지금 안쓰는 걸로는 되어 있는데...
       {
         tf::StampedTransform transform;
         if (tf_listener.waitForTransform(cloud->header.frame_id, stamp, cloud->header.frame_id, prev_time, robot_odom_frame_id, ros::Duration(0)))
@@ -246,47 +249,59 @@ namespace hdl_graph_slam
       }
 
       pcl::PointCloud<PointT>::Ptr aligned(new pcl::PointCloud<PointT>());
-      registration->align(*aligned, prev_trans * msf_delta.matrix());
 
+      // 지정한 registration 방법으로 align 진행
+      registration->align(*aligned, prev_trans * msf_delta.matrix()); // origin -> keyframe -> init guess 위치로 데이터 전달
+
+      // 디버깅용으로 넣어놓은 듯 함. Scan matching 성능 체크하기 위한 함수로 보임
       publish_scan_matching_status(stamp, cloud->header.frame_id, aligned, msf_source, msf_delta);
 
+      // 수렴하지 못하면 벌어지는 참사
       if (!registration->hasConverged())
       {
         NODELET_INFO_STREAM("scan matching has not converged!!");
         NODELET_INFO_STREAM("ignore this frame(" << stamp << ")");
-        return keyframe_pose * prev_trans;
+        return keyframe_pose * prev_trans; // 여기서 이전에 성공한 registration이 있다면 keyframe_pose는 odom데이터와 같음
       }
 
       Eigen::Matrix4f trans = registration->getFinalTransformation();
       Eigen::Matrix4f odom = keyframe_pose * trans;
 
-      if (transform_thresholding)
+      if (transform_thresholding)  // Registration 결과에 대한 검사
       {
-        Eigen::Matrix4f delta = prev_trans.inverse() * trans;
-        double dx = delta.block<3, 1>(0, 3).norm();
-        double da = std::acos(Eigen::Quaternionf(delta.block<3, 3>(0, 0)).w());
+        Eigen::Matrix4f delta = prev_trans.inverse() * trans; // 이전 키프레임과 이번 정합 사이에 구한 변환 차이
+        double dx = delta.block<3, 1>(0, 3).norm(); // 평행이동 변환
+        double da = std::acos(Eigen::Quaternionf(delta.block<3, 3>(0, 0)).w()); // 회전변환의 변화값을 저장(w)
 
-        if (dx > max_acceptable_trans || da > max_acceptable_angle)
+        if (dx > max_acceptable_trans || da > max_acceptable_angle) // 거리와 각도가 지정한 값보다 크면 // 무시
         {
           NODELET_INFO_STREAM("too large transform!!  " << dx << "[m] " << da << "[rad]");
           NODELET_INFO_STREAM("ignore this frame(" << stamp << ")");
           return keyframe_pose * prev_trans;
         }
       }
-
+      
+      // 위 조건을 통과하면 prev_trans와 stamp에 저장
       prev_time = stamp;
       prev_trans = trans;
+
 
       auto keyframe_trans = matrix2transform(stamp, keyframe_pose, odom_frame_id, "keyframe");
       keyframe_broadcaster.sendTransform(keyframe_trans);
 
+      // 이거 여기서 왜 또 하는거지? -> 여기는 키프래임을 설정하기 위한 부분 이전은 registration을 검사하는 부분
       double delta_trans = trans.block<3, 1>(0, 3).norm();
       double delta_angle = std::acos(Eigen::Quaternionf(trans.block<3, 3>(0, 0)).w());
       double delta_time = (stamp - keyframe_stamp).toSec();
+      // Keyframe 지정을 위한 검사 -> 지정한 길이보다 변환의 길이가 길면 그 측정값이 들어온 때에 Keyframe을 생성
+      
+      // ToDo 
+      // RGB-D 센서와 같이 포인트 인지 거리가 짧은 센서들은 Keyframe_delta 값이 짧아야 registration이 잘 될 것으로 생각됨. -> 해보자
+      // 아니면 registration을 할 때 keyframe 주변에 n개의 프레임을 매칭 데이터로 넘겨주는 식으로 변경이 되어야 매칭이 잘 될 것으로 생각됨. -> 위 결과에 따라 필요할 수도?
       if (delta_trans > keyframe_delta_trans || delta_angle > keyframe_delta_angle || delta_time > keyframe_delta_time)
       {
         keyframe = filtered;
-        registration->setInputTarget(keyframe);
+        registration->setInputTarget(keyframe); // 바꾼다면 이 부분에 들어가는 pointcloud를 local map으로 주는 형식으로 되어야 할듯
 
         keyframe_pose = odom;
         keyframe_stamp = stamp;
@@ -305,12 +320,15 @@ namespace hdl_graph_slam
     }
 
     /**
-     * @brief publish odometry
+     * @brief publish odometry for IMU integration, tf, and nav_msgs
      * @param stamp  timestamp
      * @param pose   odometry pose to be published
      */
     void publish_odometry(const ros::Time &stamp, const std::string &base_frame_id, const Eigen::Matrix4f &pose)
     {
+
+      // 용도가 다 달라 대단해 Koide쨩
+
       // publish transform stamped for IMU integration
       geometry_msgs::TransformStamped odom_trans = matrix2transform(stamp, pose, odom_frame_id, base_frame_id);
       trans_pub.publish(odom_trans);
