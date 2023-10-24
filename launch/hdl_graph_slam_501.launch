@@ -56,7 +56,7 @@
     <param name="downsample_method" value="NONE" />
     <param name="downsample_resolution" value="0.1" />
     <!-- ICP, GICP, NDT, GICP_OMP, NDT_OMP, FAST_GICP(recommended), or FAST_VGICP -->
-    <param name="registration_method" value="FAST_GICP" />
+    <param name="registration_method" value="NDT_OMP" />
     <param name="reg_num_threads" value="0" />
     <param name="reg_transformation_epsilon" value="0.1"/>
     <param name="reg_maximum_iterations" value="64"/>
@@ -107,7 +107,7 @@
     <param name="min_edge_interval" value="1.0" />
     <param name="fitness_score_thresh" value="0.5" />
     <!-- scan matching params -->
-    <param name="registration_method" value="FAST_GICP" />
+    <param name="registration_method" value="NDT_OMP" />
     <param name="reg_num_threads" value="0" />
     <param name="reg_transformation_epsilon" value="0.1"/>
     <param name="reg_maximum_iterations" value="64"/>

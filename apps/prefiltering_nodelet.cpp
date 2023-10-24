@@ -70,7 +70,8 @@ private:
     }
 
     std::string outlier_removal_method = private_nh.param<std::string>("outlier_removal_method", "STATISTICAL");
-    if(outlier_removal_method == "STATISTICAL") {
+    if(outlier_removal_method == "STATISTICAL") 
+    {
       int mean_k = private_nh.param<int>("statistical_mean_k", 20);
       double stddev_mul_thresh = private_nh.param<double>("statistical_stddev", 1.0);
       std::cout << "outlier_removal: STATISTICAL " << mean_k << " - " << stddev_mul_thresh << std::endl;
@@ -79,7 +80,8 @@ private:
       sor->setMeanK(mean_k);
       sor->setStddevMulThresh(stddev_mul_thresh);
       outlier_removal_filter = sor;
-    } else if(outlier_removal_method == "RADIUS") {
+    } else if(outlier_removal_method == "RADIUS") 
+    {
       double radius = private_nh.param<double>("radius_radius", 0.8);
       int min_neighbors = private_nh.param<int>("radius_min_neighbors", 2);
       std::cout << "outlier_removal: RADIUS " << radius << " - " << min_neighbors << std::endl;

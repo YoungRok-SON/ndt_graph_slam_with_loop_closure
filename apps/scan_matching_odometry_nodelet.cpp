@@ -179,7 +179,8 @@ private:
     std::string msf_source;
     Eigen::Isometry3f msf_delta = Eigen::Isometry3f::Identity();
 
-    if(private_nh.param<bool>("enable_imu_frontend", false)) {
+    if(private_nh.param<bool>("enable_imu_frontend", false)) 
+    {
       if(msf_pose && msf_pose->header.stamp > keyframe_stamp && msf_pose_after_update && msf_pose_after_update->header.stamp > keyframe_stamp) {
         Eigen::Isometry3d pose0 = pose2isometry(msf_pose_after_update->pose.pose);
         Eigen::Isometry3d pose1 = pose2isometry(msf_pose->pose.pose);
@@ -190,17 +191,24 @@ private:
       } else {
         std::cerr << "msf data is too old" << std::endl;
       }
-    } else if(private_nh.param<bool>("enable_robot_odometry_init_guess", false) && !prev_time.isZero()) {
+    } 
+    else if(private_nh.param<bool>("enable_robot_odometry_init_guess", false) && !prev_time.isZero()) 
+    {
       tf::StampedTransform transform;
-      if(tf_listener.waitForTransform(cloud->header.frame_id, stamp, cloud->header.frame_id, prev_time, robot_odom_frame_id, ros::Duration(0))) {
+      if(tf_listener.waitForTransform(cloud->header.frame_id, stamp, cloud->header.frame_id, prev_time, robot_odom_frame_id, ros::Duration(0))) 
+      {
         tf_listener.lookupTransform(cloud->header.frame_id, stamp, cloud->header.frame_id, prev_time, robot_odom_frame_id, transform);
-      } else if(tf_listener.waitForTransform(cloud->header.frame_id, ros::Time(0), cloud->header.frame_id, prev_time, robot_odom_frame_id, ros::Duration(0))) {
+      } 
+      else if(tf_listener.waitForTransform(cloud->header.frame_id, ros::Time(0), cloud->header.frame_id, prev_time, robot_odom_frame_id, ros::Duration(0))) 
+      {
         tf_listener.lookupTransform(cloud->header.frame_id, ros::Time(0), cloud->header.frame_id, prev_time, robot_odom_frame_id, transform);
       }
 
       if(transform.stamp_.isZero()) {
         NODELET_WARN_STREAM("failed to look up transform between " << cloud->header.frame_id << " and " << robot_odom_frame_id);
-      } else {
+      } 
+      else 
+      {
         msf_source = "odometry";
         msf_delta = tf2isometry(transform).cast<float>();
       }

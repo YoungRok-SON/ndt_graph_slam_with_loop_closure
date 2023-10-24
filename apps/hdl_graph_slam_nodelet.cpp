@@ -210,7 +210,7 @@ private:
       if(keyframes.empty() && new_keyframes.size() == 1) {
       
         if(private_nh.param<bool>("fix_first_node", false)) {
-          Eigen::MatrixXd inf = Eigen::MatrixXd::Identity(6, 6);
+          Eigen::MatrixXd inf = Eigen::MatrixXd::Identity(6, 6); // Information matrix를 의미하는 것 같은데..
           std::stringstream sst(private_nh.param<std::string>("fix_first_node_stddev", "1 1 1 1 1 1"));
           for(int i = 0; i < 6; i++) {
             double stddev = 1.0;
