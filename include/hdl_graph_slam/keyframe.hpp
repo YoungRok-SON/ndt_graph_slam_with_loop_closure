@@ -8,13 +8,15 @@
 #include <pcl/point_cloud.h>
 #include <boost/optional.hpp>
 
+// 전방선언
 namespace g2o {
 class VertexSE3;
 class HyperGraph;
 class SparseOptimizer;
 }  // namespace g2o
 
-namespace hdl_graph_slam {
+namespace hdl_graph_slam 
+{
 
 /**
  * @brief KeyFrame (pose node)

@@ -85,18 +85,11 @@ namespace hdl_graph_slam
       map_cloud_resolution = private_nh.param<double>("map_cloud_resolution", 0.05);
       trans_odom2map.setIdentity();
 
-<<<<<<< HEAD
-      // 업데이트당 할당할 수 있는 최대 키프레임
-      max_keyframes_per_update = private_nh.param<int>("max_keyframes_per_update", 10);
-
-      // Variables for Graph construction
-=======
       // 한 업데이트(최적화)마다 최대로 최적화할 수 있는 키 프레임
       // Q. 그럼 1번부터 10번까지 했으면 10번부터 19번까지 진행되는건가?
       max_keyframes_per_update = private_nh.param<int>("max_keyframes_per_update", 10);
 
       // node, edge 및 graph 관련 객체 초기화
->>>>>>> 592831bcc1311176a76679c51c2f50876d36e2f9
       anchor_node = nullptr;
       anchor_edge = nullptr;
       floor_plane_node = nullptr;
