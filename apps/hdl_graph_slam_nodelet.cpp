@@ -145,7 +145,7 @@ namespace hdl_graph_slam
       graph_updated = false;
       double graph_update_interval = private_nh.param<double>("graph_update_interval", 3.0);
       double map_cloud_update_interval = private_nh.param<double>("map_cloud_update_interval", 10.0);
-      optimization_timer = mt_nh.createWallTimer(ros::WallDuration(graph_update_interval), &HdlGraphSlamNodelet::optimization_timer_callback, this);
+      optimization_timer = mt_nh.createWallTimer(ros::WallDuration(graph_update_interval), &HdlGraphSlamNodelet::optimization_timer_callback, this); //3초마다 한번씩 퍼블리쉬
       map_publish_timer = mt_nh.createWallTimer(ros::WallDuration(map_cloud_update_interval), &HdlGraphSlamNodelet::map_points_publish_timer_callback, this);
     }
 
@@ -184,10 +184,10 @@ namespace hdl_graph_slam
       }
 
       double accum_d = keyframe_updater->get_accum_distance();
-      KeyFrame::Ptr keyframe(new KeyFrame(stamp, odom, accum_d, cloud)); // Keyframe으로 추가
+      KeyFrame::Ptr keyframe(new KeyFrame(stamp, odom, accum_d, cloud)); // Keyframe 구조체에 대이터를 넣은 다음에
 
-      std::lock_guard<std::mutex> lock(keyframe_queue_mutex); // 이 뮤택스는 왜 건거지 Unlock은 어디서?
-      keyframe_queue.push_back(keyframe);
+      std::lock_guard<std::mutex> lock(keyframe_queue_mutex); // 뮤텍스 걸고
+      keyframe_queue.push_back(keyframe); // 생성한 키프레임 객체를 큐에 넣기
     }
 
     /**
@@ -198,18 +198,20 @@ namespace hdl_graph_slam
     {
       std::lock_guard<std::mutex> lock(keyframe_queue_mutex);
 
+      // 키프레임큐가 비어있다면 그냥 리턴
       if (keyframe_queue.empty())
       {
         return false;
       }
 
       trans_odom2map_mutex.lock();
-      Eigen::Isometry3d odom2map(trans_odom2map.cast<double>());
+      Eigen::Isometry3d odom2map(trans_odom2map.cast<double>()); // trans_odom2map 변수 값을 double로 캐스팅해서 odom2map이라는 변수 생성
+      // trans_odom2map은 어디서 가져오는거? -> delta transformatoin
       trans_odom2map_mutex.unlock();
 
-      std::cout << "flush_keyframe_queue - keyframes len:" << keyframes.size() << std::endl;
+      std::cout << "flush_keyframe_queue - keyframes len:" << keyframes.size() << std::endl; //Keyframe queue도 있는데 이건 왜 따로 벡터로 지정해놨지?
       int num_processed = 0;
-      for (int i = 0; i < std::min<int>(keyframe_queue.size(), max_keyframes_per_update); i++)
+      for (int i = 0; i < std::min<int>(keyframe_queue.size(), max_keyframes_per_update); i++) // Keyframe queue에 있는 개수가 min보다 작으면 개수만큼만 진행
       {
         num_processed = i;
 
@@ -219,8 +221,8 @@ namespace hdl_graph_slam
 
         // add pose node
         Eigen::Isometry3d odom = odom2map * keyframe->odom;
-        keyframe->node = graph_slam->add_se3_node(odom);
-        keyframe_hash[keyframe->stamp] = keyframe;
+        keyframe->node = graph_slam->add_se3_node(odom); // Keyframe 객체를 생성할 때 노드에 대한 값이 비어 있음. 그걸 이때 채워넣는듯 그리고 그래프 안에도 넣어줌
+        keyframe_hash[keyframe->stamp] = keyframe; // floor_queue에서 매칭되는 키프레임을 찾을 때 해쉬값을 사용해서 찾음
 
         // fix the first node
         if (keyframes.empty() && new_keyframes.size() == 1)
@@ -237,24 +239,28 @@ namespace hdl_graph_slam
               inf(i, i) = 1.0 / stddev;
             }
 
-            anchor_node = graph_slam->add_se3_node(Eigen::Isometry3d::Identity());
-            anchor_node->setFixed(true);
-            anchor_edge = graph_slam->add_se3_edge(anchor_node, keyframe->node, Eigen::Isometry3d::Identity(), inf);
+            anchor_node = graph_slam->add_se3_node(Eigen::Isometry3d::Identity()); // 처음 노드
+            anchor_node->setFixed(true);  // 고정
+            anchor_edge = graph_slam->add_se3_edge(anchor_node, keyframe->node, Eigen::Isometry3d::Identity(), inf); // 앵커노드와 첫번째 키프레임 사이 에지를 지정
           }
         }
 
-        if (i == 0 && keyframes.empty())
+        if (i == 0 && keyframes.empty()) // 만약 Keyframe들을 모아놓는 벡터에 아무것도 없으면 그냥 넘어감
         {
-          continue;
+          continue; // 이 std::vector<KeyFrame::Ptr> 형태의 변수 용도가 뭔지? 
         }
 
         // add edge between consecutive keyframes
         const auto &prev_keyframe = i == 0 ? keyframes.back() : keyframe_queue[i - 1];
+        // keyframe_queue는 어디선가 계속 초기화가 되나?
+        // 일단 i==0 일때 현재 키프레임과 이전 키프레임을 엮어줘야하니 prev_keyframe을 지정해주는 것으로 보임
 
-        Eigen::Isometry3d relative_pose = keyframe->odom.inverse() * prev_keyframe->odom;
+        Eigen::Isometry3d relative_pose = keyframe->odom.inverse() * prev_keyframe->odom; // 현재와 이전 사이의 상대 포즈 구하고
         Eigen::MatrixXd information = inf_calclator->calc_information_matrix(keyframe->cloud, prev_keyframe->cloud, relative_pose);
+        // 뭐 어떻게 해서 information matrix까지 구함 -> 나중에 읽어볼거
         auto edge = graph_slam->add_se3_edge(keyframe->node, prev_keyframe->node, relative_pose, information);
         graph_slam->add_robust_kernel(edge, private_nh.param<std::string>("odometry_edge_robust_kernel", "NONE"), private_nh.param<double>("odometry_edge_robust_kernel_size", 1.0));
+        // 이건 또 뭘까
       }
 
       std_msgs::Header read_until;
@@ -264,6 +270,8 @@ namespace hdl_graph_slam
       read_until.frame_id = "/filtered_points";
       read_until_pub.publish(read_until);
 
+
+      // 아 3초에 한번씩 도니까 한번 싹 밀어 넣은 다음에 처리한건 다 지우는구나
       keyframe_queue.erase(keyframe_queue.begin(), keyframe_queue.begin() + num_processed + 1);
       return true;
     }
@@ -626,13 +634,15 @@ namespace hdl_graph_slam
         read_until_pub.publish(read_until);
       }
 
+
+      // 어떠한 키프레임과 큐도 업데이트가 되지 않은 경우 그냥 return
       if (!keyframe_updated & !flush_floor_queue() & !flush_gps_queue() & !flush_imu_queue())
       {
         return;
       }
 
       // loop detection
-      std::vector<Loop::Ptr> loops = loop_detector->detect(keyframes, new_keyframes, *graph_slam);
+      std::vector<Loop::Ptr> loops = loop_detector->detect(keyframes, new_keyframes, *graph_slam); // 새로운 키프래임과 이전 키프레임 사이의 매칭 진행?
       for (const auto &loop : loops)
       {
         Eigen::Isometry3d relpose(loop->relative_pose.cast<double>());
@@ -642,6 +652,7 @@ namespace hdl_graph_slam
       }
 
       std::copy(new_keyframes.begin(), new_keyframes.end(), std::back_inserter(keyframes));
+      // new_keyframes의 모든 원소들이 keyframes의 끝에 추가
       new_keyframes.clear();
 
       // move the first node anchor position to the current estimate of the first node pose
@@ -654,15 +665,16 @@ namespace hdl_graph_slam
 
       // optimize the pose graph
       int num_iterations = private_nh.param<int>("g2o_solver_num_iterations", 1024);
-      graph_slam->optimize(num_iterations);
+      graph_slam->optimize(num_iterations); // 지정한 회수만큼 최적화 진행
 
       // publish tf
       const auto &keyframe = keyframes.back();
       Eigen::Isometry3d trans = keyframe->node->estimate() * keyframe->odom.inverse();
       trans_odom2map_mutex.lock();
-      trans_odom2map = trans.matrix().cast<float>();
+      trans_odom2map = trans.matrix().cast<float>(); // 이 값은 왜 이렇게 해놓지?
       trans_odom2map_mutex.unlock();
 
+      // 벡터인 Keyframes에 있는 객체들을 복사해서 snapshot이라는 벡터 컨테이너에 KeyFrameSnapshot이라는 형태로 저장
       std::vector<KeyFrameSnapshot::Ptr> snapshot(keyframes.size());
       std::transform(keyframes.begin(), keyframes.end(), snapshot.begin(), [=](const KeyFrame::Ptr &k)
                      { return std::make_shared<KeyFrameSnapshot>(k); });
