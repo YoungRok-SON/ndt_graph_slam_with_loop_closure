@@ -100,6 +100,7 @@ void GraphSLAM::set_solver(const std::string& solver_type) {
 int GraphSLAM::num_vertices() const {
   return graph->vertices().size();
 }
+
 int GraphSLAM::num_edges() const {
   return graph->edges().size();
 }

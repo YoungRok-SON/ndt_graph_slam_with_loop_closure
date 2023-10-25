@@ -207,7 +207,7 @@ namespace hdl_graph_slam
 
       std::string msf_source;
       Eigen::Isometry3f msf_delta = Eigen::Isometry3f::Identity();
-
+      
       // msf가 뭔지 모르겠음. IMU Preintegration해서 init pose로 사용하려는건가..?
       if (private_nh.param<bool>("enable_imu_frontend", false))
       {

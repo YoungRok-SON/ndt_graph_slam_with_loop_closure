@@ -85,9 +85,10 @@ namespace hdl_graph_slam
       map_cloud_resolution = private_nh.param<double>("map_cloud_resolution", 0.05);
       trans_odom2map.setIdentity();
 
+      // 업데이트당 할당할 수 있는 최대 키프레임
       max_keyframes_per_update = private_nh.param<int>("max_keyframes_per_update", 10);
 
-      //
+      // Variables for Graph construction
       anchor_node = nullptr;
       anchor_edge = nullptr;
       floor_plane_node = nullptr;
