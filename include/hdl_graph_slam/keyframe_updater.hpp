@@ -49,7 +49,7 @@ public:
       return false;
     }
 
-    accum_distance += dx;
+    accum_distance += dx; // Keyframe으로써 추가가 되는 것이 확정되면 누적 거리를 증가
     prev_keypose = pose;
     return true;
   }

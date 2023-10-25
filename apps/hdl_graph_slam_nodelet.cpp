@@ -85,25 +85,37 @@ namespace hdl_graph_slam
       map_cloud_resolution = private_nh.param<double>("map_cloud_resolution", 0.05);
       trans_odom2map.setIdentity();
 
+<<<<<<< HEAD
       // 업데이트당 할당할 수 있는 최대 키프레임
       max_keyframes_per_update = private_nh.param<int>("max_keyframes_per_update", 10);
 
       // Variables for Graph construction
+=======
+      // 한 업데이트(최적화)마다 최대로 최적화할 수 있는 키 프레임
+      // Q. 그럼 1번부터 10번까지 했으면 10번부터 19번까지 진행되는건가?
+      max_keyframes_per_update = private_nh.param<int>("max_keyframes_per_update", 10);
+
+      // node, edge 및 graph 관련 객체 초기화
+>>>>>>> 592831bcc1311176a76679c51c2f50876d36e2f9
       anchor_node = nullptr;
       anchor_edge = nullptr;
       floor_plane_node = nullptr;
       graph_slam.reset(new GraphSLAM(private_nh.param<std::string>("g2o_solver_type", "lm_var")));
+
+      // 이 친구들은 뭐하는 친구들인지 좀 더 봐야할 듯
       keyframe_updater.reset(new KeyframeUpdater(private_nh));
       loop_detector.reset(new LoopDetector(private_nh));
       map_cloud_generator.reset(new MapCloudGenerator());
       inf_calclator.reset(new InformationMatrixCalculator(private_nh));
       nmea_parser.reset(new NmeaSentenceParser());
 
+      // 추가 엣지를 위한 정보들
       gps_time_offset = private_nh.param<double>("gps_time_offset", 0.0);
       gps_edge_stddev_xy = private_nh.param<double>("gps_edge_stddev_xy", 10000.0);
       gps_edge_stddev_z = private_nh.param<double>("gps_edge_stddev_z", 10.0);
       floor_edge_stddev = private_nh.param<double>("floor_edge_stddev", 10.0);
 
+      // 추가 엣지를 위한 정보들
       imu_time_offset = private_nh.param<double>("imu_time_offset", 0.0);
       enable_imu_orientation = private_nh.param<bool>("enable_imu_orientation", false);
       enable_imu_acceleration = private_nh.param<bool>("enable_imu_acceleration", false);
@@ -115,7 +127,7 @@ namespace hdl_graph_slam
       // subscribers
       odom_sub.reset(new message_filters::Subscriber<nav_msgs::Odometry>(mt_nh, published_odom_topic, 256));
       cloud_sub.reset(new message_filters::Subscriber<sensor_msgs::PointCloud2>(mt_nh, "/filtered_points", 32));
-      sync.reset(new message_filters::Synchronizer<ApproxSyncPolicy>(ApproxSyncPolicy(32), *odom_sub, *cloud_sub));
+      sync.reset(new message_filters::Synchronizer<ApproxSyncPolicy>(ApproxSyncPolicy(32), *odom_sub, *cloud_sub)); // 포인트클라우드랑 포즈 정보랑 엮으려고 필터 사용
       sync->registerCallback(boost::bind(&HdlGraphSlamNodelet::cloud_callback, this, _1, _2));
       imu_sub = nh.subscribe("/gpsimu_driver/imu_data", 1024, &HdlGraphSlamNodelet::imu_callback, this);
       floor_sub = nh.subscribe("/floor_detection/floor_coeffs", 1024, &HdlGraphSlamNodelet::floor_coeffs_callback, this);
@@ -150,7 +162,7 @@ namespace hdl_graph_slam
      * @param odom_msg
      * @param cloud_msg
      */
-    void cloud_callback(const nav_msgs::OdometryConstPtr &odom_msg, const sensor_msgs::PointCloud2::ConstPtr &cloud_msg)
+    void cloud_callback(const nav_msgs::OdometryConstPtr &odom_msg, const sensor_msgs::PointCloud2::ConstPtr &cloud_msg) // odometry 데이터랑 포인트 클라우드를 같이 수신
     {
       const ros::Time &stamp = cloud_msg->header.stamp;
       Eigen::Isometry3d odom = odom2isometry(odom_msg);
@@ -162,11 +174,11 @@ namespace hdl_graph_slam
         base_frame_id = cloud_msg->header.frame_id;
       }
 
-      if (!keyframe_updater->update(odom))
+      if (!keyframe_updater->update(odom)) // 이전 keyframe과의 거리 계산을 통해 짧으면 false, 길면 true
       {
         std::lock_guard<std::mutex> lock(keyframe_queue_mutex);
-        if (keyframe_queue.empty())
-        {
+        if (keyframe_queue.empty()) // keyframe_queue가 비어있다면
+        { // 이 read_untill 이라는 부분 뭔지 잘 모르겠음
           std_msgs::Header read_until;
           read_until.stamp = stamp + ros::Duration(10, 0);
           read_until.frame_id = points_topic;
@@ -179,9 +191,9 @@ namespace hdl_graph_slam
       }
 
       double accum_d = keyframe_updater->get_accum_distance();
-      KeyFrame::Ptr keyframe(new KeyFrame(stamp, odom, accum_d, cloud));
+      KeyFrame::Ptr keyframe(new KeyFrame(stamp, odom, accum_d, cloud)); // Keyframe으로 추가
 
-      std::lock_guard<std::mutex> lock(keyframe_queue_mutex);
+      std::lock_guard<std::mutex> lock(keyframe_queue_mutex); // 이 뮤택스는 왜 건거지 Unlock은 어디서?
       keyframe_queue.push_back(keyframe);
     }
 
