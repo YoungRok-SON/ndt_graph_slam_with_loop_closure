@@ -28,7 +28,7 @@ namespace hdl_graph_slam
   };
 
   /**
-   * @brief this class finds loops by scam matching and adds them to the pose graph
+   * @brief this class finds loops by scan matching and adds them to the pose graph
    */
   class LoopDetector
   {
@@ -42,13 +42,13 @@ namespace hdl_graph_slam
     LoopDetector(ros::NodeHandle &pnh)
     {
       distance_thresh = pnh.param<double>("distance_thresh", 5.0);
-      accum_distance_thresh = pnh.param<double>("accum_distance_thresh", 8.0);
-      distance_from_last_edge_thresh = pnh.param<double>("min_edge_interval", 5.0);
+      accum_distance_thresh = pnh.param<double>("accum_distance_thresh", 8.0); // 첫번째 Keyframe으로부터의 누적 이동 거리
+      distance_from_last_edge_thresh = pnh.param<double>("min_edge_interval", 5.0); // 마지막으로 생성된 에지와의 누적거리!
 
-      fitness_score_max_range = pnh.param<double>("fitness_score_max_range", std::numeric_limits<double>::max());
+      fitness_score_max_range = pnh.param<double>("fitness_score_max_range", std::numeric_limits<double>::max()); // 이건 왜 필요한거지
       fitness_score_thresh = pnh.param<double>("fitness_score_thresh", 0.5);
 
-      registration = select_registration_method(pnh);
+      registration = select_registration_method(pnh); // 정합 알고리즘
       last_edge_accum_distance = 0.0;
     }
 
@@ -60,12 +60,12 @@ namespace hdl_graph_slam
      */
     std::vector<Loop::Ptr> detect(const std::vector<KeyFrame::Ptr> &keyframes, const std::deque<KeyFrame::Ptr> &new_keyframes, hdl_graph_slam::GraphSLAM &graph_slam)
     {
-      std::vector<Loop::Ptr> detected_loops;
-      for (const auto &new_keyframe : new_keyframes)
+      std::vector<Loop::Ptr> detected_loops; // Loop 객체는 key1, key2, relpose로 구성
+      for (const auto &new_keyframe : new_keyframes) // 새로운 키프레임에 있는 정보를 하나씩 가져와 비교하는 듯?
       {
-        auto candidates = find_candidates(keyframes, new_keyframe);
-        auto loop = matching(candidates, new_keyframe, graph_slam);
-        if (loop)
+        auto candidates = find_candidates(keyframes, new_keyframe); // 후보자들을 먼저 찾고
+        auto loop = matching(candidates, new_keyframe, graph_slam); // 후보자들을 매칭해서 스코어 기준으로 나누는듯?
+        if (loop) // nullptr이 아니면
         {
           detected_loops.push_back(loop);
         }
@@ -89,19 +89,20 @@ namespace hdl_graph_slam
     std::vector<KeyFrame::Ptr> find_candidates(const std::vector<KeyFrame::Ptr> &keyframes, const KeyFrame::Ptr &new_keyframe) const
     {
       // too close to the last registered loop edge
-      if (new_keyframe->accum_distance - last_edge_accum_distance < distance_from_last_edge_thresh)
-      {
+      if (new_keyframe->accum_distance - last_edge_accum_distance < distance_from_last_edge_thresh) 
+      { // 새로운 키프레임의 누적거리에서 마지막으로 에지가 생성되었을 때의 거리를 뺀 값이 
+        // 지정한 값보다 작으면 그 키프레임은 넘기기
         return std::vector<KeyFrame::Ptr>();
       }
 
       std::vector<KeyFrame::Ptr> candidates;
-      candidates.reserve(32);
+      candidates.reserve(32); // GPT한테 물어보자
 
       for (const auto &k : keyframes)
       {
         // traveled distance between keyframes is too small
         if (new_keyframe->accum_distance - k->accum_distance < accum_distance_thresh)
-        {
+        { // 새로 들어온 keyframe의 누적거리와 기존 keyframe의 누적 거리가 너무 가까우면
           continue;
         }
 
@@ -109,12 +110,13 @@ namespace hdl_graph_slam
         const auto &pos2 = new_keyframe->node->estimate().translation();
 
         // estimated distance between keyframes is too small
-        double dist = (pos1.head<2>() - pos2.head<2>()).norm();
-        if (dist > distance_thresh)
-        {
+        double dist = (pos1.head<2>() - pos2.head<2>()).norm(); // x,y 데이터만 사용
+        if (dist > distance_thresh) // 지정한 거리보다 멀다면
+        { 
           continue;
         }
 
+        // 결국 지정한 거리보다 멀지만, 실제적인 거리가 가까운 애들만 후보자 벡터네 넣어 반환
         candidates.push_back(k);
       }
 
@@ -130,37 +132,37 @@ namespace hdl_graph_slam
     Loop::Ptr matching(const std::vector<KeyFrame::Ptr> &candidate_keyframes, const KeyFrame::Ptr &new_keyframe, hdl_graph_slam::GraphSLAM &graph_slam)
     {
       if (candidate_keyframes.empty())
-      {
+      { // 후보 키프레임이 없다면
         return nullptr;
       }
 
-      registration->setInputTarget(new_keyframe->cloud);
+      registration->setInputTarget(new_keyframe->cloud); // 새롭게 들어온 키프레임을 기준으로
 
-      double best_score = std::numeric_limits<double>::max();
-      KeyFrame::Ptr best_matched;
-      Eigen::Matrix4f relative_pose;
+      double best_score = std::numeric_limits<double>::max(); // 최저값을 넣는게 아니라 최대값?
+      KeyFrame::Ptr best_matched; // 제일 스코어가 높은 키프레임 선정
+      Eigen::Matrix4f relative_pose; // 두 키프레임 사이의 상대 변환
 
       std::cout << std::endl;
       std::cout << "--- loop detection ---" << std::endl;
       std::cout << "num_candidates: " << candidate_keyframes.size() << std::endl;
-      std::cout << "matching" << std::flush;
+      std::cout << "matching" << std::flush; // flush 사용하면 즉시 출력 가능. 아래 연산 때문에 출력이 늦어지는 일이 없게..
       auto t1 = ros::Time::now();
 
       pcl::PointCloud<PointT>::Ptr aligned(new pcl::PointCloud<PointT>());
       for (const auto &candidate : candidate_keyframes)
       {
-        registration->setInputSource(candidate->cloud);
-        Eigen::Isometry3d new_keyframe_estimate = new_keyframe->node->estimate();
+        registration->setInputSource(candidate->cloud); // 매칭시킬 포인트 클라우드를 가져옴
+        Eigen::Isometry3d new_keyframe_estimate = new_keyframe->node->estimate(); // 타겟의 값 위치 값 가져옴
         new_keyframe_estimate.linear() = Eigen::Quaterniond(new_keyframe_estimate.linear()).normalized().toRotationMatrix();
         Eigen::Isometry3d candidate_estimate = candidate->node->estimate();
         candidate_estimate.linear() = Eigen::Quaterniond(candidate_estimate.linear()).normalized().toRotationMatrix();
         Eigen::Matrix4f guess = (new_keyframe_estimate.inverse() * candidate_estimate).matrix().cast<float>();
-        guess(2, 3) = 0.0;
+        guess(2, 3) = 0.0; // 높이를 없애는 역할..
         registration->align(*aligned, guess);
         std::cout << "." << std::flush;
 
         double score = registration->getFitnessScore(fitness_score_max_range);
-        if (!registration->hasConverged() || score > best_score)
+        if (!registration->hasConverged() || score > best_score) // 매칭이 제대로 안된 경우
         {
           continue;
         }

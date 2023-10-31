@@ -97,7 +97,7 @@ namespace hdl_graph_slam
 
       // 이 친구들은 뭐하는 친구들인지 좀 더 봐야할 듯
       keyframe_updater.reset(new KeyframeUpdater(private_nh));
-      loop_detector.reset(new LoopDetector(private_nh));
+      loop_detector.reset(new LoopDetector(private_nh)); // Loop Closure 클래스 객체 생성
       map_cloud_generator.reset(new MapCloudGenerator());
       inf_calclator.reset(new InformationMatrixCalculator(private_nh));
       nmea_parser.reset(new NmeaSentenceParser());
