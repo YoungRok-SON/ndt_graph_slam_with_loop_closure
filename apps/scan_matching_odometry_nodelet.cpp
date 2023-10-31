@@ -117,7 +117,10 @@ namespace hdl_graph_slam
       // Registration cpp에서 GICP나 ICP, NGD_OMP와 같은 방법의
       // 클래스를 가져와 객체로 반환해줌
       // NDT_OMP에 대해 알고 싶으면 NDT_OMP 패키지 코드를 더 까봐야함.
-      registration = select_registration_method(pnh);
+      registration = select_registration_method(pnh); 
+      // 지정한 방법을 가지고 있는 클래스 객체의 Ptr을 반환
+      // ex) pclomp::NormalDistributionsTransform<PointT, PointT>::Ptr ndt(new pclomp::NormalDistributionsTransform<PointT, PointT>());
+
     }
 
     /**
@@ -143,7 +146,7 @@ namespace hdl_graph_slam
       read_until->stamp = cloud_msg->header.stamp + ros::Duration(1, 0);
       read_until_pub.publish(read_until);
 
-      read_until->frame_id = "/filtered_points";  // 이거 두 개가 붙어 있으면 무슨 의미지?
+      read_until->frame_id = "/filtered_points"; 
       read_until_pub.publish(read_until);
       /* 이 코드의 의도는 특정한 주제에 대한 포인트 클라우드 데이터를 읽어오는 동안,
          다음 1초 동안의 데이터도 함께 읽어오라는 지시를 주는 것으로 보입니다.
@@ -190,7 +193,7 @@ namespace hdl_graph_slam
     Eigen::Matrix4f matching(const ros::Time &stamp, const pcl::PointCloud<PointT>::ConstPtr &cloud)
     {
       // Keyframe이 없을 때
-      if (!keyframe)
+      if (!keyframe) // 이 keyframe은 어디서 값을 넣어주는거지?
       {
         prev_time = ros::Time();
         prev_trans.setIdentity(); // prev_trans는 previous estimated transform from keyframe이라는데 keyframe으로부터 이전 프레임까지의 변환행렬을 저장하는 거겠지?
