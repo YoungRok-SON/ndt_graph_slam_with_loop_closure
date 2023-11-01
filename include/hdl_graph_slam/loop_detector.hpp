@@ -15,7 +15,7 @@ namespace hdl_graph_slam
 
   struct Loop
   {
-  public
+  public:
     EIGEN_MAKE_ALIGNED_OPERATOR_NEW
     using Ptr = std::shared_ptr<Loop>;
 
